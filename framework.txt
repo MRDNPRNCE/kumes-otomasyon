@@ -1,0 +1,21 @@
+kumes_otomasyon/
+├── main.py
+├── core/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
+│   ├── websocket_bridge.py
+│   ├── alarm_manager.py
+│   └── command_dispatcher.py
+├── ui/
+│   ├── __init__.py
+│   ├── kumes_card.py
+│   ├── system_status.py
+│   ├── control_panel.py
+│   └── alarm_view.py
+├── data/
+│   ├── __init__.py
+│   ├── real_time_updater.py
+│   └── report_generator.py
+├── requirements.txt
+└── README.md

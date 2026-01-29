@@ -1,0 +1,462 @@
+import sys
+import json
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTabWidget, QStackedWidget, QFrame, QLabel, QGridLayout
+)
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QFont
+
+from core.config import APP_TITLE, DEFAULT_ESP_IP, WS_PORT
+from core.database import DatabaseManager
+from core.websocket_bridge import WebSocketBridge
+from core.alarm_manager import AlarmManager
+from ui.kumes_card import KumesCard
+from ui.system_status import SystemStatusPanel
+from ui.control_panel import ControlPanel
+from ui.alarm_view import AlarmView
+from ui.settings_tab import SettingsTab
+from data.real_time_updater import RealTimeDataUpdater
+
+
+class KumesOtomasyonMainWindow(QMainWindow):
+    def __init__(self, initial_ip: str = DEFAULT_ESP_IP):
+        super().__init__()
+        
+        print("\n" + "=" * 70)
+        print("KUMES OTOMASYON SISTEMI - SOL PANEL VERSIYONU")
+        print("=" * 70)
+        print(f"   IP  : {DEFAULT_ESP_IP}")
+        print(f"   Port: {WS_PORT}")
+        print("=" * 70 + "\n")
+        
+        self.setWindowTitle(APP_TITLE)
+        self.resize(1600, 900)
+        
+        self.db = DatabaseManager()
+        self.ws = WebSocketBridge(initial_ip)
+        self.alarm_mgr = AlarmManager(self.db)
+        self.updater = RealTimeDataUpdater(self.ws)
+        
+        self.kumes_widgets = {}
+        self.kumes_data = {}
+        
+        self._init_ui()
+        self._connect_signals()
+        
+        self.ws.connect()
+        self.updater.start()
+        self._add_test_alarms()
+    
+    def _init_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        
+        main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(20)
+        
+        # SOL PANEL
+        left_panel = QVBoxLayout()
+        
+        # Kümes Kareleri
+        grid_container = QWidget()
+        grid_layout = QGridLayout(grid_container)
+        grid_layout.setSpacing(15)
+        
+        for i in range(1, 4):
+            card = self._create_kumes_card(i)
+            grid_layout.addWidget(card, (i-1)//2, (i-1)%2)
+            self.kumes_widgets[i] = {
+                'frame': card,
+                'icon': card.findChild(QLabel, 'icon'),
+                'name': card.findChild(QLabel, 'name'),
+                'temp': card.findChild(QLabel, 'temp'),
+                'status': card.findChild(QLabel, 'status')
+            }
+        
+        left_panel.addWidget(grid_container)
+        left_panel.addStretch()
+        
+        # Gelişmiş System Status Panel
+        self.system_panel = self._create_enhanced_status_panel()
+        left_panel.addWidget(self.system_panel)
+        
+        main_layout.addLayout(left_panel, stretch=1)
+        
+        # SAĞ PANEL - Sekmeler
+        self.tabs = QTabWidget()
+        
+        self.detail_tab = QStackedWidget()
+        welcome = QLabel("Sol taraftan bir kümes seçin")
+        welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        welcome.setStyleSheet("font-size: 16px; color: #8b949e;")
+        self.detail_tab.addWidget(welcome)
+        self.tabs.addTab(self.detail_tab, "Kümes Detay")
+        
+        self.control_panel = ControlPanel(self.ws)
+        self.tabs.addTab(self.control_panel, "Kontrol")
+        
+        self.alarm_view = AlarmView(self.alarm_mgr)
+        self.tabs.addTab(self.alarm_view, "Alarmlar")
+        
+        self.settings_tab = SettingsTab(self.ws)
+        self.tabs.addTab(self.settings_tab, "Ayarlar")
+        
+        main_layout.addWidget(self.tabs, stretch=3)
+    
+    def _create_kumes_card(self, kumes_id):
+        """Sol paneldeki kümes kartını oluşturur"""
+        card = QFrame()
+        card.setFixedSize(180, 200)
+        card.setCursor(Qt.CursorShape.PointingHandCursor)
+        card.setObjectName(f"kumes_{kumes_id}")
+        card.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #21262d, stop:1 #161b22
+                );
+                border: 3px solid #30363d;
+                border-radius: 15px;
+            }
+            QFrame:hover {
+                border-color: #58a6ff;
+            }
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # İkon
+        icon = QLabel("🏠")
+        icon.setObjectName("icon")
+        icon.setFont(QFont("Segoe UI", 40))
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon)
+        
+        # İsim
+        name = QLabel(f"KÜMES {kumes_id}")
+        name.setObjectName("name")
+        name.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name.setStyleSheet("color: #c9d1d9;")
+        layout.addWidget(name)
+        
+        # Sıcaklık
+        temp = QLabel("-- °C")
+        temp.setObjectName("temp")
+        temp.setFont(QFont("Segoe UI", 11))
+        temp.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        temp.setStyleSheet("color: #8b949e;")
+        layout.addWidget(temp)
+        
+        # Durum
+        status = QLabel("●")
+        status.setObjectName("status")
+        status.setFont(QFont("Segoe UI", 14))
+        status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status.setStyleSheet("color: #58a6ff;")
+        layout.addWidget(status)
+        
+        card.mousePressEvent = lambda e, kid=kumes_id: self._on_kumes_clicked(kid)
+        
+        return card
+    
+    def _create_enhanced_status_panel(self):
+        """Gelişmiş sistem durum paneli"""
+        panel = QFrame()
+        panel.setFixedWidth(390)
+        panel.setStyleSheet("""
+            QFrame {
+                background-color: #161b22;
+                border: 2px solid #30363d;
+                border-radius: 12px;
+                padding: 15px;
+            }
+        """)
+        
+        layout = QVBoxLayout(panel)
+        layout.setSpacing(12)
+        
+        # Başlık
+        title = QLabel("📊 SİSTEM DURUMU")
+        title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #58a6ff; border: none;")
+        layout.addWidget(title)
+        
+        # Ayırıcı
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #30363d; max-height: 1px; border: none;")
+        layout.addWidget(line)
+        
+        # Bağlantı Durumu
+        self.connection_status = self._create_status_item("🔌", "Bağlantı", "Bekleniyor...")
+        layout.addWidget(self.connection_status)
+        
+        # Toplam Alarm
+        self.total_alarms = self._create_status_item("🚨", "Aktif Alarm", "0")
+        layout.addWidget(self.total_alarms)
+        
+        # Çalışma Süresi
+        self.uptime = self._create_status_item("⏱️", "Çalışma Süresi", "00:00:00")
+        layout.addWidget(self.uptime)
+        
+        # Ortalama Sıcaklık
+        self.avg_temp = self._create_status_item("🌡️", "Ort. Sıcaklık", "-- °C")
+        layout.addWidget(self.avg_temp)
+        
+        # Ortalama Nem
+        self.avg_hum = self._create_status_item("💧", "Ort. Nem", "-- %")
+        layout.addWidget(self.avg_hum)
+        
+        # Yem Seviyesi
+        self.feed_level = self._create_status_item("🌾", "Yem Seviyesi", "-- cm")
+        layout.addWidget(self.feed_level)
+        
+        # Pompa Durumu
+        self.pump_status = self._create_status_item("💦", "Pompa", "Kapalı")
+        layout.addWidget(self.pump_status)
+        
+        layout.addStretch()
+        
+        return panel
+    
+    def _create_status_item(self, icon, label, value):
+        """Durum paneli için tek satır öğe"""
+        container = QFrame()
+        container.setStyleSheet("""
+            QFrame {
+                background-color: #21262d;
+                border-radius: 8px;
+                padding: 10px;
+                border: none;
+            }
+        """)
+        
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(10, 8, 10, 8)
+        
+        icon_label = QLabel(icon)
+        icon_label.setFont(QFont("Segoe UI", 16))
+        layout.addWidget(icon_label)
+        
+        text_label = QLabel(label)
+        text_label.setFont(QFont("Segoe UI", 11))
+        text_label.setStyleSheet("color: #8b949e; background: transparent;")
+        layout.addWidget(text_label)
+        
+        layout.addStretch()
+        
+        value_label = QLabel(value)
+        value_label.setObjectName("value")
+        value_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        value_label.setStyleSheet("color: #c9d1d9; background: transparent;")
+        layout.addWidget(value_label)
+        
+        return container
+    
+    def _connect_signals(self):
+        self.ws.dataReceived.connect(self._handle_data)
+        self.ws.connectionChanged.connect(self._on_connection_changed)
+        self.alarm_mgr.alarmAdded.connect(self._update_alarm_display)
+        self.alarm_mgr.alarmCleared.connect(self._update_alarm_display)
+    
+    def _handle_data(self, raw_json: str):
+        try:
+            data = json.loads(raw_json)
+            
+            # Kümes kartlarını güncelle
+            if 'kumesler' in data:
+                temps = []
+                hums = []
+                
+                for kumes in data['kumesler']:
+                    kumes_id = kumes.get('id')
+                    self.kumes_data[kumes_id] = kumes
+                    
+                    if kumes_id in self.kumes_widgets:
+                        # Sıcaklık
+                        temp = kumes.get('sicaklik', 0)
+                        temps.append(temp)
+                        self.kumes_widgets[kumes_id]['temp'].setText(f"{temp:.1f} °C")
+                        
+                        # Nem
+                        hum = kumes.get('nem', 0)
+                        hums.append(hum)
+                        
+                        # Alarm kontrolü
+                        has_alarm = kumes.get('alarm', False)
+                        self._update_kumes_card_alarm(kumes_id, has_alarm)
+                        
+                        if has_alarm:
+                            mesaj = kumes.get('mesaj', 'Alarm!')
+                            self.alarm_mgr.add_alarm(kumes_id, mesaj)
+                
+                # Ortalamalar
+                if temps:
+                    avg_t = sum(temps) / len(temps)
+                    self.avg_temp.findChild(QLabel, "value").setText(f"{avg_t:.1f} °C")
+                
+                if hums:
+                    avg_h = sum(hums) / len(hums)
+                    self.avg_hum.findChild(QLabel, "value").setText(f"{avg_h:.1f} %")
+            
+            # Sistem bilgileri
+            if 'yem' in data:
+                self.feed_level.findChild(QLabel, "value").setText(f"{data['yem']} cm")
+            
+            if 'pompa' in data:
+                status = "Açık" if data['pompa'] else "Kapalı"
+                color = "#48bb78" if data['pompa'] else "#8b949e"
+                value_label = self.pump_status.findChild(QLabel, "value")
+                value_label.setText(status)
+                value_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
+            
+            if 'zaman' in data:
+                seconds = data['zaman']
+                hours = seconds // 3600
+                minutes = (seconds % 3600) // 60
+                secs = seconds % 60
+                self.uptime.findChild(QLabel, "value").setText(f"{hours:02d}:{minutes:02d}:{secs:02d}")
+            
+            # Detay sekmesini güncelle
+            if self.detail_tab.currentWidget() and isinstance(self.detail_tab.currentWidget(), KumesCard):
+                current_id = self.detail_tab.currentWidget().kumes_id
+                if current_id in self.kumes_data:
+                    self.detail_tab.currentWidget().update_data(self.kumes_data[current_id])
+                    
+        except Exception as e:
+            print(f"Veri işleme hatası: {e}")
+    
+    def _update_kumes_card_alarm(self, kumes_id, has_alarm):
+        """Kümes kartının alarm durumunu günceller"""
+        if kumes_id not in self.kumes_widgets:
+            return
+        
+        card = self.kumes_widgets[kumes_id]['frame']
+        icon = self.kumes_widgets[kumes_id]['icon']
+        status = self.kumes_widgets[kumes_id]['status']
+        
+        if has_alarm:
+            # ALARM DURUMU - Kırmızı
+            card.setStyleSheet("""
+                QFrame {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #3d1a1a, stop:1 #2d0000
+                    );
+                    border: 4px solid #ff4444;
+                    border-radius: 15px;
+                }
+                QFrame:hover {
+                    border-color: #ff6666;
+                }
+            """)
+            icon.setText("⚠️")
+            status.setText("● ALARM")
+            status.setStyleSheet("color: #ff4444; font-weight: bold;")
+        else:
+            # NORMAL DURUM
+            card.setStyleSheet("""
+                QFrame {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #21262d, stop:1 #161b22
+                    );
+                    border: 3px solid #30363d;
+                    border-radius: 15px;
+                }
+                QFrame:hover {
+                    border-color: #58a6ff;
+                }
+            """)
+            icon.setText("🏠")
+            status.setText("● Normal")
+            status.setStyleSheet("color: #48bb78;")
+    
+    def _update_alarm_display(self):
+        """Alarm sayısını günceller"""
+        count = self.alarm_mgr.get_alarm_count()
+        color = "#ff4444" if count > 0 else "#8b949e"
+        value_label = self.total_alarms.findChild(QLabel, "value")
+        value_label.setText(str(count))
+        value_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
+    
+    def _on_connection_changed(self, connected):
+        """Bağlantı durumunu günceller"""
+        status = "Bağlı ✓" if connected else "Bağlantı Yok ✗"
+        color = "#48bb78" if connected else "#ff4444"
+        
+        self.setWindowTitle(f"{APP_TITLE} - {status}")
+        
+        value_label = self.connection_status.findChild(QLabel, "value")
+        value_label.setText(status)
+        value_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
+    
+    def _on_kumes_clicked(self, kumes_id):
+        """Kümes kartına tıklandığında"""
+        # Detay sekmesini güncelle
+        while self.detail_tab.count() > 1:
+            widget = self.detail_tab.widget(1)
+            self.detail_tab.removeWidget(widget)
+            widget.deleteLater()
+        
+        detail_card = KumesCard(kumes_id)
+        if kumes_id in self.kumes_data:
+            detail_card.update_data(self.kumes_data[kumes_id])
+        
+        self.detail_tab.addWidget(detail_card)
+        self.detail_tab.setCurrentWidget(detail_card)
+        
+        # Detay sekmesine geç
+        self.tabs.setCurrentIndex(0)
+        
+        print(f"Kümes {kumes_id} detayları gösteriliyor")
+    
+    def _add_test_alarms(self):
+        QTimer.singleShot(4000, self._create_test_alarm)
+    
+    def _create_test_alarm(self):
+        print("\n🧪 Test alarmı oluşturuluyor...")
+        self.alarm_mgr.add_alarm(2, "TEST: Yüksek sıcaklık!")
+        self._update_kumes_card_alarm(2, True)
+    
+    def closeEvent(self, event):
+        try:
+            if self.updater:
+                self.updater.stop()
+            if self.ws:
+                self.ws.disconnect()
+            if self.db:
+                self.db.close()
+        except:
+            pass
+        event.accept()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    dark_theme = """
+        QMainWindow { background-color: #0d1117; }
+        QWidget { background-color: #0d1117; color: #c9d1d9; }
+        QTabWidget::pane { border: 2px solid #30363d; background: #161b22; border-radius: 8px; }
+        QTabBar::tab { background: #21262d; color: #8b949e; padding: 12px 24px; 
+                       border: 1px solid #30363d; font-weight: bold; }
+        QTabBar::tab:selected { background: #1f6feb; color: white; }
+        QLabel { color: #c9d1d9; }
+    """
+    app.setStyleSheet(dark_theme)
+    
+    window = KumesOtomasyonMainWindow()
+    window.show()
+    
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

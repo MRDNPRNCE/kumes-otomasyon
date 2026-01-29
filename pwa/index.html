@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Kümes Otomasyon Sistemi - Mobil Kontrol">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <title>🐔 Kümes Otomasyon</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #4caf50;
+            --danger: #f44336;
+            --warning: #ff9800;
+            --info: #2196f3;
+            --bg-dark: #0d1117;
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-radius: 16px;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        body.dark-mode {
+            --bg-dark: #0d1117;
+            --card-bg: #161b22;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            padding-bottom: 80px;
+            transition: all 0.3s;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--card-bg);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 1.1em;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        
+        .header-right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            transition: transform 0.3s;
+        }
+        
+        .theme-toggle:active {
+            transform: scale(0.9);
+        }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .status-badge.online {
+            background: rgba(76, 175, 80, 0.15);
+            color: var(--success);
+        }
+        
+        .status-badge.offline {
+            background: rgba(244, 67, 54, 0.15);
+            color: var(--danger);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.1); }
+        }
+        
+        /* Container */
+        .container {
+            padding: 16px;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        
+        /* ✨ MOD BADGE - YENİ */
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+        }
+        
+        .mode-badge.manuel {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .mode-badge.otomatik {
+            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+            color: white;
+        }
+        
+        .mode-icon {
+            font-size: 1.1em;
+        }
+        
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .summary-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary);
+        }
+        
+        .summary-card.success::before { background: var(--success); }
+        .summary-card.danger::before { background: var(--danger); }
+        .summary-card.warning::before { background: var(--warning); }
+        .summary-card.info::before { background: var(--info); }
+        
+        .summary-icon {
+            font-size: 2.5em;
+            opacity: 0.9;
+        }
+        
+        .summary-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+        
+        .summary-label {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .action-btn {
+            background: var(--card-bg);
+            border: none;
+            border-radius: var(--border-radius);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: all 0.3s;
+            color: var(--text-primary);
+        }
+        
+        .action-btn:active {
+            transform: scale(0.96);
+        }
+        
+        .action-btn.on {
+            background: linear-gradient(135deg, var(--success) 0%, #66bb6a 100%);
+            color: white;
+        }
+        
+        .action-btn.off {
+            background: linear-gradient(135deg, var(--danger) 0%, #ef5350 100%);
+            color: white;
+        }
+        
+        .action-icon {
+            font-size: 2.2em;
+        }
+        
+        .action-label {
+            font-size: 0.95em;
+            font-weight: 600;
+        }
+        
+        .action-status {
+            font-size: 0.75em;
+            opacity: 0.85;
+        }
+        
+        /* Detail Card */
+        .detail-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+        }
+        
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .detail-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* ✨ KÜMES NUMARASI - YENİ */
+        .kumes-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            font-weight: 700;
+            font-size: 0.95em;
+            margin-right: 4px;
+        }
+        
+        .detail-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+        
+        .detail-badge.ok {
+            background: rgba(76, 175, 80, 0.15);
+            color: var(--success);
+        }
+        
+        .detail-badge.alert {
+            background: rgba(244, 67, 54, 0.15);
+            color: var(--danger);
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .detail-item-label {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+        }
+        
+        .detail-item-value {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        /* ✨ KÜMES KONTROL BUTONLARI - YENİ */
+        .kumes-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .kumes-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .kumes-btn:active {
+            transform: scale(0.96);
+        }
+        
+        .kumes-btn.led-on {
+            background: linear-gradient(135deg, #ffd54f 0%, #ffb300 100%);
+            color: #333;
+        }
+        
+        .kumes-btn.led-off {
+            background: rgba(0,0,0,0.1);
+            color: var(--text-secondary);
+        }
+        
+        .kumes-btn.fan-on {
+            background: linear-gradient(135deg, #4fc3f7 0%, #0277bd 100%);
+            color: white;
+        }
+        
+        .kumes-btn.fan-off {
+            background: rgba(0,0,0,0.1);
+            color: var(--text-secondary);
+        }
+        
+        /* Alarm */
+        .alarm-box {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffe5b4 100%);
+            border-left: 4px solid var(--warning);
+            padding: 14px;
+            border-radius: 12px;
+            margin: 12px 0;
+            display: flex;
+            gap: 10px;
+            align-items: start;
+        }
+        
+        .alarm-icon {
+            font-size: 1.3em;
+        }
+        
+        .alarm-text {
+            flex: 1;
+            font-size: 0.9em;
+            color: #856404;
+            font-weight: 500;
+        }
+        
+        /* Bottom Nav */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--card-bg);
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 0 20px 0;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 20px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.7em;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%) scaleX(0);
+            width: 40px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 0 0 3px 3px;
+            transition: transform 0.3s;
+        }
+        
+        .nav-item.active {
+            color: var(--primary);
+        }
+        
+        .nav-item.active::before {
+            transform: translateX(-50%) scaleX(1);
+        }
+        
+        .nav-icon {
+            font-size: 2em;
+            margin-bottom: 4px;
+        }
+        
+        /* Pages */
+        .page {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Settings */
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .setting-label {
+            font-size: 0.95em;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        /* Switch */
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider-switch {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: #ccc;
+            border-radius: 28px;
+            transition: 0.3s;
+        }
+        
+        .slider-switch:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        
+        input:checked + .slider-switch {
+            background: var(--primary);
+        }
+        
+        input:checked + .slider-switch:before {
+            transform: translateX(22px);
+        }
+        
+        /* Input */
+        .input-group {
+            margin: 16px 0;
+        }
+        
+        .input-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .input-field {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-radius: 12px;
+            font-size: 1em;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            transition: border 0.3s;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        /* Button */
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        /* Control Slider */
+        .control-slider {
+            margin: 20px 0;
+        }
+        
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        
+        .slider-title {
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .slider-value-display {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .range-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 8px;
+            outline: none;
+        }
+        
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: var(--primary);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 1000;
+            animation: slideDown 0.3s;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translate(-50%, -20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <h1>🐔 Kümes Sistemi</h1>
+        </div>
+        <div class="header-right">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Tema Değiştir">🌓</button>
+            <div id="status-badge" class="status-badge offline">
+                <div class="status-dot"></div>
+                <span>Bağlantı Yok</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Ana Sayfa -->
+    <div id="page-home" class="page active">
+        <div class="container">
+            <!-- ✨ MOD BADGE - YENİ -->
+            <div id="mode-badge" class="mode-badge manuel">
+                <span class="mode-icon">✋</span>
+                <span id="mode-text">Manuel Mod</span>
+            </div>
+            
+            <!-- Özet Kartlar -->
+            <div class="summary-grid">
+                <div class="summary-card success">
+                    <div class="summary-icon">🌡️</div>
+                    <div class="summary-value" id="avg-temp">--</div>
+                    <div class="summary-label">Ort. Sıcaklık</div>
+                </div>
+                <div class="summary-card info">
+                    <div class="summary-icon">💧</div>
+                    <div class="summary-value" id="avg-humidity">--</div>
+                    <div class="summary-label">Ort. Nem</div>
+                </div>
+                <div class="summary-card warning">
+                    <div class="summary-icon">⚠️</div>
+                    <div class="summary-value" id="alarm-count">0</div>
+                    <div class="summary-label">Aktif Alarm</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-icon">⏱️</div>
+                    <div class="summary-value" id="uptime-summary">--</div>
+                    <div class="summary-label">Çalışma</div>
+                </div>
+            </div>
+            
+            <!-- Hızlı İşlemler -->
+            <div class="quick-actions">
+                <button class="action-btn on" onclick="sendCmd('LED:1')">
+                    <div class="action-icon">💡</div>
+                    <div class="action-label">Işık Aç</div>
+                </button>
+                <button class="action-btn off" onclick="sendCmd('LED:0')">
+                    <div class="action-icon">🌑</div>
+                    <div class="action-label">Işık Kapat</div>
+                </button>
+                <button class="action-btn on" onclick="sendCmd('POMPA:1'); setTimeout(() => sendCmd('POMPA:0'), 10000)">
+                    <div class="action-icon">💧</div>
+                    <div class="action-label">Su Ver</div>
+                    <div class="action-status">10 saniye</div>
+                </button>
+                <button class="action-btn on" onclick="sendCmd('YEM:5')">
+                    <div class="action-icon">🌾</div>
+                    <div class="action-label">Yem Dağıt</div>
+                    <div class="action-status">5 saniye</div>
+                </button>
+            </div>
+            
+            <!-- ✨ Detaylı Kümes Kartları - GÜNCELLEME -->
+            <div id="kumes-details"></div>
+        </div>
+    </div>
+    
+    <!-- Kontrol Sayfası -->
+    <div id="page-control" class="page">
+        <div class="container">
+            <!-- ✨ MOD KONTROL - YENİ -->
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🤖 Sistem Modu</div>
+                </div>
+                <div style="display: grid; gap: 10px;">
+                    <button class="btn btn-primary" onclick="sendCmd('MOD:MANUAL')" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        ✋ Manuel Mod
+                    </button>
+                    <button class="btn btn-primary" onclick="sendCmd('MOD:AUTO')" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);">
+                        🤖 Otomatik Mod
+                    </button>
+                </div>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🌀 Fan Kontrol</div>
+                </div>
+                <div style="display: grid; gap: 10px;">
+                    <button class="btn btn-primary" onclick="sendCmd('FAN1:1')">Fan 1 Aç</button>
+                    <button class="btn btn-primary" onclick="sendCmd('FAN1:0')" style="background: var(--danger);">Fan 1 Kapat</button>
+                    <button class="btn btn-primary" onclick="sendCmd('FAN2:1')">Fan 2 Aç</button>
+                    <button class="btn btn-primary" onclick="sendCmd('FAN2:0')" style="background: var(--danger);">Fan 2 Kapat</button>
+                    <button class="btn btn-primary" onclick="sendCmd('FAN3:1')">Fan 3 Aç</button>
+                    <button class="btn btn-primary" onclick="sendCmd('FAN3:0')" style="background: var(--danger);">Fan 3 Kapat</button>
+                </div>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🚪 Kapı Kontrolü</div>
+                </div>
+                <div class="control-slider">
+                    <div class="slider-header">
+                        <div class="slider-title">Kapı Açısı</div>
+                        <div class="slider-value-display" id="door-angle">0°</div>
+                    </div>
+                    <input type="range" min="0" max="180" value="0" class="range-slider" id="door-slider"
+                           oninput="document.getElementById('door-angle').textContent = this.value + '°'">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px;">
+                    <button class="btn btn-primary" onclick="setDoor(0)" style="font-size: 0.9em;">Kapat</button>
+                    <button class="btn btn-primary" onclick="setDoor(90)" style="font-size: 0.9em;">Aç</button>
+                    <button class="btn btn-primary" onclick="sendCmd('KAPI:' + document.getElementById('door-slider').value)" style="font-size: 0.9em;">Uygula</button>
+                </div>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🌾 Yem Dağıtma</div>
+                </div>
+                <div class="control-slider">
+                    <div class="slider-header">
+                        <div class="slider-title">Süre</div>
+                        <div class="slider-value-display" id="feed-time">5 sn</div>
+                    </div>
+                    <input type="range" min="1" max="30" value="5" class="range-slider" id="feed-slider"
+                           oninput="document.getElementById('feed-time').textContent = this.value + ' sn'">
+                </div>
+                <button class="btn btn-primary" onclick="sendCmd('YEM:' + document.getElementById('feed-slider').value)" style="margin-top: 12px;">🌾 Yem Dağıt</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Ayarlar Sayfası -->
+    <div id="page-settings" class="page">
+        <div class="container">
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🎨 Görünüm</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Koyu Tema</div>
+                    <label class="switch">
+                        <input type="checkbox" id="dark-mode-toggle" onchange="toggleTheme()">
+                        <span class="slider-switch"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">🌐 Bağlantı</div>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">ESP32 IP Adresi</label>
+                    <input type="text" class="input-field" id="esp32-ip" placeholder="192.168.1.100">
+                </div>
+                <button class="btn btn-primary" onclick="updateIP()">💾 Kaydet ve Bağlan</button>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">ℹ️ Bilgi</div>
+                </div>
+                <div style="color: var(--text-secondary); line-height: 1.8; font-size: 0.9em;">
+                    <p><strong>Versiyon:</strong> 2.1.0</p>
+                    <p><strong>Platform:</strong> PWA</p>
+                    <p><strong>Özellikler:</strong> Mod Geçişi + Kümes ID</p>
+                    <p><strong>Son Güncelleme:</strong> Ocak 2026</p>
+                </div>
+            </div>
+            
+            <div class="detail-card">
+                <div class="detail-header">
+                    <div class="detail-title">📱 Ana Ekrana Ekle</div>
+                </div>
+                <div style="font-size: 0.85em; color: var(--text-secondary); line-height: 1.6;">
+                    <p style="margin-bottom: 10px;"><strong>iOS:</strong> Safari → Paylaş → "Ana Ekrana Ekle"</p>
+                    <p><strong>Android:</strong> Chrome → Menü → "Ana ekrana ekle"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="showPage('home')">
+            <div class="nav-icon">🏠</div>
+            <div>Ana Sayfa</div>
+        </div>
+        <div class="nav-item" onclick="showPage('control')">
+            <div class="nav-icon">🎮</div>
+            <div>Kontrol</div>
+        </div>
+        <div class="nav-item" onclick="showPage('settings')">
+            <div class="nav-icon">⚙️</div>
+            <div>Ayarlar</div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+    <script src="app-auth.js"></script>
+    <script src="app-alarms.js"></script>
+    <script src="app-auto-settings.js"></script>
+    <script src="app-session-manager.js"></script>
+</body>
+</html>

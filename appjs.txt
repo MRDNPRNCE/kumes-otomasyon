@@ -1,0 +1,50 @@
+function connectWebSocket() {
+    const wsUrl = `ws://${esp32IP}:81`;
+    console.log(`🔌 WebSocket bağlanıyor: ${wsUrl}`);
+    
+    updateConnectionStatus(false);
+    
+    try {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log('✅ WebSocket bağlandı');
+            updateConnectionStatus(true);
+            showNotification('✅ Bağlantı kuruldu!');
+            
+            // İlk durum sorgula
+            sendCmd('STATUS');
+        };
+        
+        ws.onmessage = (event) => {
+            console.log('📥 Veri alındı:', event.data);
+            handleData(event.data);
+        };
+        
+        ws.onerror = (error) => {
+            console.error('❌ WebSocket hatası:', error);
+            updateConnectionStatus(false);
+        };
+        
+        ws.onclose = () => {
+            console.log('⚠️ WebSocket bağlantısı kesildi');
+            updateConnectionStatus(false);
+            showNotification('⚠️ Bağlantı kesildi');
+            
+            // 5 saniye sonra tekrar bağlan
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => {
+                console.log('🔄 Yeniden bağlanıyor...');
+                connectWebSocket();
+            }, 5000);
+        };
+    } catch (error) {
+        console.error('❌ WebSocket oluşturma hatası:', error);
+        updateConnectionStatus(false);
+    }
+}
+setInterval(() => {
+   if (ws && ws.readyState === WebSocket.OPEN) {
+        sendCmd('STATUS');
+    }
+}, 5000);
