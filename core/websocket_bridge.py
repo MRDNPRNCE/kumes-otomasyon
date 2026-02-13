@@ -91,20 +91,19 @@ class WebSocketBridge(QObject):
         print(f"✓ WebSocket bağlantısı açıldı: {self.ip}:{self.port}")
 
     def _on_message(self, ws, message):
-        data = json.loads(message)
-    
-    # Session manager'a yönlendir
-        if hasattr(self, 'session_manager'):
-            self.session_manager.handle_message(data)
-        
         """Mesaj alındığında"""
         try:
             # Bytes'ı string'e çevir
             if isinstance(message, bytes):
                 message = message.decode('utf-8')
-            
-            # Mesajın geçerli JSON olduğunu kontrol et
-            json.loads(message)  # Validate
+
+            # JSON olarak parse et ve doğrula
+            data = json.loads(message)
+
+            # Session manager'a yönlendir
+            if hasattr(self, 'session_manager') and self.session_manager:
+                self.session_manager.handle_message(data)
+
             self.dataReceived.emit(message)
         except json.JSONDecodeError as e:
             print(f"Geçersiz JSON alındı: {message[:100]}... Hata: {e}")

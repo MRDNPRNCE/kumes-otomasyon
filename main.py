@@ -60,7 +60,7 @@ class WebSocketThread(QThread):
     """WebSocket bağlantısını ayrı thread'de çalıştır"""
     message_received = pyqtSignal(str)
     connection_status = pyqtSignal(bool)
-    
+
     def __init__(self, ip, port=81):
         super().__init__()
         self.ip = ip
@@ -68,47 +68,76 @@ class WebSocketThread(QThread):
         self.websocket = None
         self.running = True
         self.session_id = None
-        
+        self._loop = None  # Event loop referansı
+        self._send_queue = asyncio.Queue()
+
     async def connect_and_listen(self):
         """WebSocket'e bağlan ve dinle"""
         uri = f"ws://{self.ip}:{self.port}"
         print(f"🔌 Bağlanılıyor: {uri}")
-        
+
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, open_timeout=10) as websocket:
                 self.websocket = websocket
                 self.connection_status.emit(True)
                 print("✅ WebSocket bağlandı!")
-                
-                while self.running:
-                    try:
-                        message = await asyncio.wait_for(
-                            websocket.recv(), 
-                            timeout=1.0
-                        )
-                        self.message_received.emit(message)
-                    except asyncio.TimeoutError:
-                        continue
-                    except Exception as e:
-                        print(f"❌ Mesaj alma hatası: {e}")
-                        break
-                        
+
+                # Mesaj alma ve gönderme görevlerini paralel çalıştır
+                receive_task = asyncio.create_task(self._receive_loop(websocket))
+                send_task = asyncio.create_task(self._send_loop(websocket))
+
+                try:
+                    await asyncio.gather(receive_task, send_task)
+                except Exception:
+                    receive_task.cancel()
+                    send_task.cancel()
+
         except Exception as e:
             print(f"❌ Bağlantı hatası: {e}")
             self.connection_status.emit(False)
-    
+
+    async def _receive_loop(self, websocket):
+        """Mesaj alma döngüsü"""
+        while self.running:
+            try:
+                message = await asyncio.wait_for(
+                    websocket.recv(),
+                    timeout=1.0
+                )
+                self.message_received.emit(message)
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                print(f"❌ Mesaj alma hatası: {e}")
+                break
+
+    async def _send_loop(self, websocket):
+        """Mesaj gönderme döngüsü - kuyruktan mesaj alıp gönderir"""
+        while self.running:
+            try:
+                message = await asyncio.wait_for(
+                    self._send_queue.get(),
+                    timeout=1.0
+                )
+                await websocket.send(message)
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                print(f"❌ Mesaj gönderme hatası: {e}")
+                break
+
     def run(self):
         """Thread başlatıldığında çalışır"""
-        asyncio.run(self.connect_and_listen())
-    
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_until_complete(self.connect_and_listen())
+        self._loop.close()
+
     def send_message(self, message):
-        """Mesaj gönder"""
-        if self.websocket:
-            try:
-                asyncio.run(self.websocket.send(message))
-            except:
-                pass
-    
+        """Thread-safe mesaj gönder (herhangi bir thread'den çağrılabilir)"""
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._send_queue.put_nowait, message)
+
     def stop(self):
         """Thread'i durdur"""
         self.running = False
