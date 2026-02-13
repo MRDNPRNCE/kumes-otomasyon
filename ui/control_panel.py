@@ -33,32 +33,20 @@ class ControlPanel(QWidget):
         self._init_ui()
 
     def _send_command(self, action: str, kumes: int = None):
-        """Komut gönder"""
-        
-        # ❌ KALDIRILIYOR: User kontrolü
-        # if self.user_mgr and not self.user_mgr.is_admin():
-        #     QMessageBox.warning(
-        #         self,
-        #         "Yetki Yok",
-        #         "⚠️ Bu özellik sadece yöneticiler için!"
-        #     )
-        #     return
-        
-        # ✅ YENİ: Herkes komut gönderebilir
-        # Komut oluştur
+        """JSON formatında komut gönder"""
+        import json
         cmd = {"action": action}
         if kumes is not None:
             cmd["kumes"] = kumes
-        
-        # Gönder
-        if self.ws and self.ws.is_connected:
-            self.ws.send_command(cmd)
+
+        if self.sender and self.sender.is_connected():
+            self.sender.send_command(json.dumps(cmd))
             print(f"✅ Komut gönderildi: {cmd}")
         else:
             QMessageBox.warning(
                 self,
                 "Bağlantı Yok",
-                "⚠️ ESP32'ye bağlı değilsiniz!\n\nLütfen bağlantıyı kontrol edin."
+                "ESP32'ye bağlı değilsiniz!\n\nLütfen bağlantıyı kontrol edin."
             )
 
     def _send(self, cmd: str):

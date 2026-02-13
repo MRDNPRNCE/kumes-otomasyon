@@ -2,6 +2,7 @@
 import sqlite3
 import os
 import shutil
+import threading
 from datetime import datetime
 import pandas as pd
 from .config import DB_PATH, BACKUP_DIR, TIMESTAMP_FORMAT
@@ -10,9 +11,12 @@ class DatabaseManager:
     """Tüm veritabanı işlemlerinden sorumlu singleton-like sınıf"""
 
     def __init__(self):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        db_dir = os.path.dirname(DB_PATH)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         os.makedirs(BACKUP_DIR, exist_ok=True)
-        self.conn = sqlite3.connect(DB_PATH)
+        self._lock = threading.Lock()
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self._create_tables()
 
     def _create_tables(self):
@@ -53,43 +57,47 @@ class DatabaseManager:
         self.conn.commit()
 
     def save_sensor_data(self, kumes_data: dict):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO kumes_veriler (
-                kumes_id, sicaklik, nem, su_seviyesi, isik_seviyesi,
-                fan_durumu, led_durumu, alarm, alarm_mesaj
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            kumes_data.get('id'),
-            kumes_data.get('sicaklik'),
-            kumes_data.get('nem'),
-            kumes_data.get('su'),
-            kumes_data.get('isik'),
-            int(kumes_data.get('fan', False)),
-            int(kumes_data.get('led', False)),
-            int(kumes_data.get('alarm', False)),
-            kumes_data.get('mesaj', '')
-        ))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO kumes_veriler (
+                    kumes_id, sicaklik, nem, su_seviyesi, isik_seviyesi,
+                    fan_durumu, led_durumu, alarm, alarm_mesaj
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                kumes_data.get('id'),
+                kumes_data.get('sicaklik'),
+                kumes_data.get('nem'),
+                kumes_data.get('su'),
+                kumes_data.get('isik'),
+                int(kumes_data.get('fan', False)),
+                int(kumes_data.get('led', False)),
+                int(kumes_data.get('alarm', False)),
+                kumes_data.get('mesaj', '')
+            ))
+            self.conn.commit()
 
     def save_command(self, command: str, source: str = "UI", result: str = "Gönderildi"):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO komut_gecmisi (komut, kaynak, sonuc)
-            VALUES (?, ?, ?)
-        ''', (command, source, result))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO komut_gecmisi (komut, kaynak, sonuc)
+                VALUES (?, ?, ?)
+            ''', (command, source, result))
+            self.conn.commit()
 
     def save_alarm(self, kumes_id: int, message: str):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO alarm_gecmisi (kumes_id, mesaj)
-            VALUES (?, ?)
-        ''', (kumes_id, message))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO alarm_gecmisi (kumes_id, mesaj)
+                VALUES (?, ?)
+            ''', (kumes_id, message))
+            self.conn.commit()
 
     def get_all_sensor_data(self) -> pd.DataFrame:
-        return pd.read_sql_query("SELECT * FROM kumes_veriler ORDER BY timestamp DESC", self.conn)
+        with self._lock:
+            return pd.read_sql_query("SELECT * FROM kumes_veriler ORDER BY timestamp DESC", self.conn)
 
     def backup(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
