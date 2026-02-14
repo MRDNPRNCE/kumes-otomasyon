@@ -558,8 +558,8 @@ class KumesOtomasyonMainWindow(QMainWindow):
             elif msg_type == 'auth_failed':
                 QMessageBox.warning(self, "Hata", data.get('message', 'Giriş başarısız!'))
             
-            elif data.get('sistem') == 'kumes':
-                # Kümes verisi
+            elif data.get('sistem') == 'kumes' or data.get('kumesler'):
+                # Kümes verisi (sistem alanı olan veya olmayan formatları destekle)
                 self.update_kumes_data(data)
             
         except json.JSONDecodeError:

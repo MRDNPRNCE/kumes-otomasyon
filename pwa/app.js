@@ -12,8 +12,8 @@ let reconnectInterval = null;
 
 // ==================== WEBSOCKET URL ====================
 function getWebSocketURL() {
-    // ESP32'ye direkt bağlan
-    return `ws://192.168.1.117:81`;  // ← SENİN ESP32 IP'N
+    // ESP32'ye direkt bağlan - kayıtlı IP'yi kullan
+    return `ws://${esp32IP}:81`;
 }
 
 // ==================== WEBSOCKET BAĞLANTISI ====================
@@ -93,8 +93,8 @@ function connectWebSocket() {
                     else if (data.type === 'user_joined') {
                         console.log('👤 Kullanıcı katıldı:', data.username);
                     }
-                    // Normal kümes verisi
-                    else if (data.sistem === 'kumes') {
+                    // Normal kümes verisi (sistem alanı olan veya olmayan formatları destekle)
+                    else if (data.sistem === 'kumes' || data.kumesler) {
                         handleData(data);
                         handleSensorData(data); // ✨ YENİ - Mod badge için
                         
@@ -459,15 +459,30 @@ function checkDarkMode() {
 function updateIP() {
     const ipInput = document.getElementById('esp32-ip');
     if (!ipInput) return;
-    
-    const ip = ipInput.value;
+
+    const ip = ipInput.value.trim();
+    if (!ip) {
+        showNotification('❌ IP adresi boş olamaz!');
+        return;
+    }
+
     localStorage.setItem('esp32_ip', ip);
     esp32IP = ip;
-    
+
     showNotification('💾 IP adresi kaydedildi! Bağlanılıyor...');
-    
-    if (ws) ws.close();
-    setTimeout(connectWebSocket, 1000);
+
+    // Mevcut bağlantıyı ve reconnect timer'ları temizle
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (ws) {
+        ws.onclose = null; // Otomatik reconnect'i engelle
+        ws.close();
+        ws = null;
+    }
+
+    setTimeout(connectWebSocket, 500);
 }
 
 // ==================== AYARLARI YÜKLE ====================

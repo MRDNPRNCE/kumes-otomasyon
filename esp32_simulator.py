@@ -28,6 +28,7 @@ AUTO_MODE = True  # Otomatik mod (False yaparsanız sadece manuel)
 # BAŞLANGIÇ DURUMU
 # =============================================================================
 state = {
+    "sistem": "kumes",
     "kumesler": [
         {
             "id": 1,
